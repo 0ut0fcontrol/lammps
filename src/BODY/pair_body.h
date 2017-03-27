@@ -190,7 +190,7 @@ class PairBody : public Pair {
     WaterDb() {
       std::cout << "initialize water db" << std::endl;
       std::string model = "wtr";
-      std::string database_file = "/home/fuqiuyu/work/QEM_MD/body/sethbrin/QM/version2/Dimer_deltaEForceTorque_data_mp2_wtr_wtr.txt.gz";
+      std::string database_file = "./Dimer_deltaEForceTorque_data_mp2_wtr_wtr.txt.gz";
       energe_ = new database::EnergeForceDatabase(database_file.c_str(), model.c_str());
       energe_->read_file();
       interpolation_ = new QM::QMInterpolation(model, *energe_);
