@@ -64,6 +64,22 @@ PairBody::~PairBody()
   }
 }
 
+std::vector<double> PairBody::computeForceAndTorque(const WaterAtom& lhs,
+                                     const WaterAtom& rhs) {
+  auto res = water_db_.Calculate(lhs, rhs);
+  return res;
+  //fprintf(stderr, "use db to Calculate energe and force,"
+  //        "energe:%lf, force:%lf\n", res[0], res[1]);
+  //srand(time(NULL));
+  //f[0] += (static_cast<double>(rand())/RAND_MAX - 0.5) * 0.004;
+  //f[1] += (static_cast<double>(rand())/RAND_MAX - 0.5) * 0.004;
+  //f[2] += (static_cast<double>(rand())/RAND_MAX - 0.5) * 0.004;
+
+  //torque[0] += (static_cast<double>(rand())/RAND_MAX - 0.5) * 7.8e-5;
+  //torque[1] += (static_cast<double>(rand())/RAND_MAX - 0.5) * 7.8e-5;
+  //torque[2] += (static_cast<double>(rand())/RAND_MAX - 0.5) * 7.8e-5;
+}
+
 /* ---------------------------------------------------------------------- */
 
 void PairBody::compute(int eflag, int vflag)
@@ -108,6 +124,7 @@ void PairBody::compute(int eflag, int vflag)
 
   // loop over neighbors of my atoms
 
+  int total = 0;
   for (ii = 0; ii < inum; ii++) {
     i = ilist[ii];
     xtmp = x[i][0];
@@ -116,6 +133,8 @@ void PairBody::compute(int eflag, int vflag)
     itype = type[i];
     jlist = firstneigh[i];
     jnum = numneigh[i];
+
+    total += jnum;
 
     for (jj = 0; jj < jnum; jj++) {
       j = jlist[jj];
@@ -140,345 +159,452 @@ void PairBody::compute(int eflag, int vflag)
         npj = dnum[j];
         jfirst = dfirst[j];
 
-        for (ni = 0; ni < npi; ni++) {
-          dxi = discrete[ifirst+ni];
+        if (true) {
+          WaterAtom atom1;
+          WaterAtom atom2;
 
+          for (ni = 0; ni < npi; ni++) {
+            dxi = discrete[ifirst+ni];
+
+            atom1.atoms.push_back(
+                                  {x[i][0] + dxi[0], x[i][1] + dxi[1], x[i][2] + dxi[2]});
+                                  printf("%lf %lf %lf\n", x[i][0] + dxi[0], x[i][1] + dxi[1], x[i][2] + dxi[2]);
+          }
           for (nj = 0; nj < npj; nj++) {
             dxj = discrete[jfirst+nj];
+            atom2.atoms.push_back(
+                                  {x[j][0] + dxj[0], x[j][1] + dxj[1], x[j][2] + dxj[2]});
+                                  printf("%lf %lf %lf\n", x[j][0] + dxj[0], x[j][1] + dxj[1], x[j][2] + dxj[2]);
+          }
 
-            xi[0] = x[i][0] + dxi[0];
-            xi[1] = x[i][1] + dxi[1];
-            xi[2] = x[i][2] + dxi[2];
-            xj[0] = x[j][0] + dxj[0];
-            xj[1] = x[j][1] + dxj[1];
-            xj[2] = x[j][2] + dxj[2];
+          auto res = computeForceAndTorque(atom1, atom2);
+            f[i][0] += res[0];
+            f[i][1] += res[1];
+            f[i][2] += res[2];
+            torque[i][0] += res[3] - (dely*res[2] - delz*res[1]);
+            torque[i][1] += res[4] - (delz*res[0] - delx*res[2]);
+            torque[i][2] += res[5] - (delx*res[1] - dely*res[0]);
 
-            delx = xi[0] - xj[0];
-            dely = xi[1] - xj[1];
-            delz = xi[2] - xj[2];
-            rsq = delx*delx + dely*dely + delz*delz;
-
-            r2inv = 1.0/rsq;
-            r6inv = r2inv*r2inv*r2inv;
-            forcelj = r6inv * (lj1[itype][jtype]*r6inv - lj2[itype][jtype]);
-            fpair = forcelj*r2inv;
-
-            if (eflag)
-              evdwl += r6inv*(lj3[itype][jtype]*r6inv-lj4[itype][jtype]);
-
-            fi[0] = delx*fpair;
-            fi[1] = dely*fpair;
-            fi[2] = delz*fpair;
-            f[i][0] += fi[0];
-            f[i][1] += fi[1];
-            f[i][2] += fi[2];
-            ti[0] = dxi[1]*fi[2] - dxi[2]*fi[1];
-            ti[1] = dxi[2]*fi[0] - dxi[0]*fi[2];
-            ti[2] = dxi[0]*fi[1] - dxi[1]*fi[0];
-            torque[i][0] += ti[0];
-            torque[i][1] += ti[1];
-            torque[i][2] += ti[2];
-
-            if (newton_pair || j < nlocal) {
-              fj[0] = -delx*fpair;
-              fj[1] = -dely*fpair;
-              fj[2] = -delz*fpair;
-              f[j][0] += fj[0];
-              f[j][1] += fj[1];
-              f[j][2] += fj[2];
-              tj[0] = dxj[1]*fj[2] - dxj[2]*fj[1];
-              tj[1] = dxj[2]*fj[0] - dxj[0]*fj[2];
-              tj[2] = dxj[0]*fj[1] - dxj[1]*fj[0];
-              torque[j][0] += tj[0];
-              torque[j][1] += tj[1];
-              torque[j][2] += tj[2];
+        // Added by qiuyu fu
+            if (eflag) {
+               evdwl += res[6];
+               printf("%lf\n",res[6] );
             }
+        // End.
+  
+            if (newton_pair || j < nlocal) {
+              f[j][0] -= res[0];
+              f[j][1] -= res[1];
+              f[j][2] -= res[2];
+  
+              torque[j][0] -= res[3];
+              torque[j][1] -= res[4];
+              torque[j][2] -= res[5];
           }
-        }
+//          auto res = computeForceAndTorque(atom2, atom1);  // revise to atom2,atom1 20170316 qyfu
+//          printf("%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n",res[0],res[1],res[2],res[3],res[4],res[5]);
+//          f[i][0] -= res[0];
+//          f[i][1] -= res[1];
+//          f[i][2] -= res[2];
+//
+//          torque[i][0] -= res[3];
+//          torque[i][1] -= res[4];
+//          torque[i][2] -= res[5];
 
-      // body/particle interaction = Nx1 sub-particles
+//          if (newton_pair || j < nlocal) {
+//            f[j][0] += -res[0];
+//            f[j][1] += -res[1];
+//            f[j][2] += -res[2];
+//
+//            torque[j][0] += -res[3];
+//            torque[j][1] += -res[4];
+//            torque[j][2] += -res[5];
+//          }
+//          if (newton_pair || j < nlocal ) {
+//             f[j][0] =+ res[0];
+//             f[j][1] =+ res[1];
+//             f[j][2] =+ res[2];
+//             torque[j][0] += res[3] - (dely*res[2] - delz*res[1]);
+//             torque[j][1] += res[4] - (delz*res[0] - delx*res[2]);
+//             torque[j][2] += res[5] - (delx*res[1] - dely*res[0]);
+//          }  // added by qyfu under hh's instruction 20170316
+             
 
-      } else if (body[i] >= 0) {
-        if (dnum[i] == 0) body2space(i);
-        npi = dnum[i];
-        ifirst = dfirst[i];
+//          for (ni = 0; ni < npi; ni++) {
+//            dxi = discrete[ifirst+ni];
+//
+//            for (nj = 0; nj < npj; nj++) {
+//              dxj = discrete[jfirst+nj];
+//
+//              xi[0] = x[i][0] + dxi[0];
+//              xi[1] = x[i][1] + dxi[1];
+//              xi[2] = x[i][2] + dxi[2];
+//              xj[0] = x[j][0] + dxj[0];
+//              xj[1] = x[j][1] + dxj[1];
+//              xj[2] = x[j][2] + dxj[2];
+//
+//              delx = xi[0] - xj[0];
+//              dely = xi[1] - xj[1];
+//              delz = xi[2] - xj[2];
+//              rsq = delx*delx + dely*dely + delz*delz;
+//
+//              r2inv = 1.0/rsq;
+//              r6inv = r2inv*r2inv*r2inv;
+//              forcelj = r6inv * (lj1[itype][jtype]*r6inv - lj2[itype][jtype]);
+//              fpair = forcelj*r2inv;
+//
+//              if (eflag)
+//                evdwl += r6inv*(lj3[itype][jtype]*r6inv-lj4[itype][jtype]);
+//
+//            }
+//          }
+        } 
+//         else {
+// 
+//           for (ni = 0; ni < npi; ni++) {
+//             dxi = discrete[ifirst+ni];
+// 
+//             for (nj = 0; nj < npj; nj++) {
+//               dxj = discrete[jfirst+nj];
+// 
+//               xi[0] = x[i][0] + dxi[0];
+//               xi[1] = x[i][1] + dxi[1];
+//               xi[2] = x[i][2] + dxi[2];
+//               xj[0] = x[j][0] + dxj[0];
+//               xj[1] = x[j][1] + dxj[1];
+//               xj[2] = x[j][2] + dxj[2];
+// 
+//               delx = xi[0] - xj[0];
+//               dely = xi[1] - xj[1];
+//               delz = xi[2] - xj[2];
+//               rsq = delx*delx + dely*dely + delz*delz;
+// 
+//               r2inv = 1.0/rsq;
+//               r6inv = r2inv*r2inv*r2inv;
+//               forcelj = r6inv * (lj1[itype][jtype]*r6inv - lj2[itype][jtype]);
+//               fpair = forcelj*r2inv;
+// 
+//               if (eflag)
+//                 evdwl += r6inv*(lj3[itype][jtype]*r6inv-lj4[itype][jtype]);
+// 
+//               fi[0] = delx*fpair;
+//               fi[1] = dely*fpair;
+//               fi[2] = delz*fpair;
+//               f[i][0] += fi[0];
+//               f[i][1] += fi[1];
+//               f[i][2] += fi[2];
+//               ti[0] = dxi[1]*fi[2] - dxi[2]*fi[1];
+//               ti[1] = dxi[2]*fi[0] - dxi[0]*fi[2];
+//               ti[2] = dxi[0]*fi[1] - dxi[1]*fi[0];
+//               torque[i][0] += ti[0];
+//               torque[i][1] += ti[1];
+//               torque[i][2] += ti[2];
+// 
+//  //           if (newton_pair || j < nlocal) {
+//  //             fj[0] = -delx*fpair;
+//  //             fj[1] = -dely*fpair;
+//  //             fj[2] = -delz*fpair;
+//  //             f[j][0] += fj[0];
+//  //             f[j][1] += fj[1];
+//  //             f[j][2] += fj[2];
+//  //             tj[0] = dxj[1]*fj[2] - dxj[2]*fj[1];
+//  //             tj[1] = dxj[2]*fj[0] - dxj[0]*fj[2];
+//  //             tj[2] = dxj[0]*fj[1] - dxj[1]*fj[0];
+//  //             torque[j][0] += tj[0];
+//  //             torque[j][1] += tj[1];
+//  //             torque[j][2] += tj[2];
+//  //           }
+//             }
+//           }
+//         }
 
-        for (ni = 0; ni < npi; ni++) {
-          dxi = discrete[ifirst+ni];
+          // body/particle interaction = Nx1 sub-particles
 
-          xi[0] = x[i][0] + dxi[0];
-          xi[1] = x[i][1] + dxi[1];
-          xi[2] = x[i][2] + dxi[2];
-          xj[0] = x[j][0];
-          xj[1] = x[j][1];
-          xj[2] = x[j][2];
+        } //else if (body[i] >= 0) {
+//          fprintf(stderr, "current not supported!\n");
+//          if (dnum[i] == 0) body2space(i);
+//          npi = dnum[i];
+//          ifirst = dfirst[i];
+//
+//          for (ni = 0; ni < npi; ni++) {
+//            dxi = discrete[ifirst+ni];
+//
+//            xi[0] = x[i][0] + dxi[0];
+//            xi[1] = x[i][1] + dxi[1];
+//            xi[2] = x[i][2] + dxi[2];
+//            xj[0] = x[j][0];
+//            xj[1] = x[j][1];
+//            xj[2] = x[j][2];
+//
+//            delx = xi[0] - xj[0];
+//            dely = xi[1] - xj[1];
+//            delz = xi[2] - xj[2];
+//            rsq = delx*delx + dely*dely + delz*delz;
+//
+//            r2inv = 1.0/rsq;
+//            r6inv = r2inv*r2inv*r2inv;
+//            forcelj = r6inv * (lj1[itype][jtype]*r6inv - lj2[itype][jtype]);
+//            fpair = forcelj*r2inv;
+//
+//            if (eflag)
+//              evdwl += r6inv*(lj3[itype][jtype]*r6inv-lj4[itype][jtype]);
+//
+//            fi[0] = delx*fpair;
+//            fi[1] = dely*fpair;
+//            fi[2] = delz*fpair;
+//            f[i][0] += fi[0];
+//            f[i][1] += fi[1];
+//            f[i][2] += fi[2];
+//            ti[0] = dxi[1]*fi[2] - dxi[2]*fi[1];
+//            ti[1] = dxi[2]*fi[0] - dxi[0]*fi[2];
+//            ti[2] = dxi[0]*fi[1] - dxi[1]*fi[0];
+//            torque[i][0] += ti[0];
+//            torque[i][1] += ti[1];
+//            torque[i][2] += ti[2];
+//
+//            if (newton_pair || j < nlocal) {
+//              fj[0] = -delx*fpair;
+//              fj[1] = -dely*fpair;
+//              fj[2] = -delz*fpair;
+//              f[j][0] += fj[0];
+//              f[j][1] += fj[1];
+//              f[j][2] += fj[2];
+//            }
+//          }
+//
+//
+//          // particle/body interaction = Nx1 sub-particles
+//
+//        } else if (body[j] >= 0) {
+//          fprintf(stderr, "current not supported!\n");
+//          if (dnum[j] == 0) body2space(j);
+//          npj = dnum[j];
+//          jfirst = dfirst[j];
+//
+//          for (nj = 0; nj < npj; nj++) {
+//            dxj = discrete[jfirst+nj];
+//
+//            xi[0] = x[i][0];
+//            xi[1] = x[i][1];
+//            xi[2] = x[i][2];
+//            xj[0] = x[j][0] + dxj[0];
+//            xj[1] = x[j][1] + dxj[1];
+//            xj[2] = x[j][2] + dxj[2];
+//
+//            delx = xi[0] - xj[0];
+//            dely = xi[1] - xj[1];
+//            delz = xi[2] - xj[2];
+//            rsq = delx*delx + dely*dely + delz*delz;
+//
+//            r2inv = 1.0/rsq;
+//            r6inv = r2inv*r2inv*r2inv;
+//            forcelj = r6inv * (lj1[itype][jtype]*r6inv - lj2[itype][jtype]);
+//            fpair = forcelj*r2inv;
+//
+//            if (eflag)
+//              evdwl += r6inv*(lj3[itype][jtype]*r6inv-lj4[itype][jtype]);
+//
+//            fi[0] = delx*fpair;
+//            fi[1] = dely*fpair;
+//            fi[2] = delz*fpair;
+//            f[i][0] += fi[0];
+//            f[i][1] += fi[1];
+//            f[i][2] += fi[2];
+//
+//            if (newton_pair || j < nlocal) {
+//              fj[0] = -delx*fpair;
+//              fj[1] = -dely*fpair;
+//              fj[2] = -delz*fpair;
+//              f[j][0] += fj[0];
+//              f[j][1] += fj[1];
+//              f[j][2] += fj[2];
+//              tj[0] = dxj[1]*fj[2] - dxj[2]*fj[1];
+//              tj[1] = dxj[2]*fj[0] - dxj[0]*fj[2];
+//              tj[2] = dxj[0]*fj[1] - dxj[1]*fj[0];
+//              torque[j][0] += tj[0];
+//              torque[j][1] += tj[1];
+//              torque[j][2] += tj[2];
+//            }
+//          }
+//
+//          // particle/particle interaction = 1x1 particles
+//
+//        } else {
+//          r2inv = 1.0/rsq;
+//          r6inv = r2inv*r2inv*r2inv;
+//          forcelj = r6inv * (lj1[itype][jtype]*r6inv - lj2[itype][jtype]);
+//          fpair = forcelj*r2inv;
+//
+//          if (eflag)
+//            evdwl += r6inv*(lj3[itype][jtype]*r6inv-lj4[itype][jtype]);
+//
+//          f[i][0] += delx*fpair;
+//          f[i][1] += dely*fpair;
+//          f[i][2] += delz*fpair;
+//          if (newton_pair || j < nlocal) {
+//            f[j][0] -= delx*fpair;
+//            f[j][1] -= dely*fpair;
+//            f[j][2] -= delz*fpair;
+//          }
+//        }
 
-          delx = xi[0] - xj[0];
-          dely = xi[1] - xj[1];
-          delz = xi[2] - xj[2];
-          rsq = delx*delx + dely*dely + delz*delz;
-
-          r2inv = 1.0/rsq;
-          r6inv = r2inv*r2inv*r2inv;
-          forcelj = r6inv * (lj1[itype][jtype]*r6inv - lj2[itype][jtype]);
-          fpair = forcelj*r2inv;
-
-          if (eflag)
-            evdwl += r6inv*(lj3[itype][jtype]*r6inv-lj4[itype][jtype]);
-
-          fi[0] = delx*fpair;
-          fi[1] = dely*fpair;
-          fi[2] = delz*fpair;
-          f[i][0] += fi[0];
-          f[i][1] += fi[1];
-          f[i][2] += fi[2];
-          ti[0] = dxi[1]*fi[2] - dxi[2]*fi[1];
-          ti[1] = dxi[2]*fi[0] - dxi[0]*fi[2];
-          ti[2] = dxi[0]*fi[1] - dxi[1]*fi[0];
-          torque[i][0] += ti[0];
-          torque[i][1] += ti[1];
-          torque[i][2] += ti[2];
-
-          if (newton_pair || j < nlocal) {
-            fj[0] = -delx*fpair;
-            fj[1] = -dely*fpair;
-            fj[2] = -delz*fpair;
-            f[j][0] += fj[0];
-            f[j][1] += fj[1];
-            f[j][2] += fj[2];
-          }
-        }
-
-
-      // particle/body interaction = Nx1 sub-particles
-
-      } else if (body[j] >= 0) {
-        if (dnum[j] == 0) body2space(j);
-        npj = dnum[j];
-        jfirst = dfirst[j];
-
-        for (nj = 0; nj < npj; nj++) {
-          dxj = discrete[jfirst+nj];
-
-          xi[0] = x[i][0];
-          xi[1] = x[i][1];
-          xi[2] = x[i][2];
-          xj[0] = x[j][0] + dxj[0];
-          xj[1] = x[j][1] + dxj[1];
-          xj[2] = x[j][2] + dxj[2];
-
-          delx = xi[0] - xj[0];
-          dely = xi[1] - xj[1];
-          delz = xi[2] - xj[2];
-          rsq = delx*delx + dely*dely + delz*delz;
-
-          r2inv = 1.0/rsq;
-          r6inv = r2inv*r2inv*r2inv;
-          forcelj = r6inv * (lj1[itype][jtype]*r6inv - lj2[itype][jtype]);
-          fpair = forcelj*r2inv;
-
-          if (eflag)
-            evdwl += r6inv*(lj3[itype][jtype]*r6inv-lj4[itype][jtype]);
-
-          fi[0] = delx*fpair;
-          fi[1] = dely*fpair;
-          fi[2] = delz*fpair;
-          f[i][0] += fi[0];
-          f[i][1] += fi[1];
-          f[i][2] += fi[2];
-
-          if (newton_pair || j < nlocal) {
-            fj[0] = -delx*fpair;
-            fj[1] = -dely*fpair;
-            fj[2] = -delz*fpair;
-            f[j][0] += fj[0];
-            f[j][1] += fj[1];
-            f[j][2] += fj[2];
-            tj[0] = dxj[1]*fj[2] - dxj[2]*fj[1];
-            tj[1] = dxj[2]*fj[0] - dxj[0]*fj[2];
-            tj[2] = dxj[0]*fj[1] - dxj[1]*fj[0];
-            torque[j][0] += tj[0];
-            torque[j][1] += tj[1];
-            torque[j][2] += tj[2];
-          }
-        }
-
-      // particle/particle interaction = 1x1 particles
-
-      } else {
-        r2inv = 1.0/rsq;
-        r6inv = r2inv*r2inv*r2inv;
-        forcelj = r6inv * (lj1[itype][jtype]*r6inv - lj2[itype][jtype]);
-        fpair = forcelj*r2inv;
-
-        if (eflag)
-          evdwl += r6inv*(lj3[itype][jtype]*r6inv-lj4[itype][jtype]);
-
-        f[i][0] += delx*fpair;
-        f[i][1] += dely*fpair;
-        f[i][2] += delz*fpair;
-        if (newton_pair || j < nlocal) {
-          f[j][0] -= delx*fpair;
-          f[j][1] -= dely*fpair;
-          f[j][2] -= delz*fpair;
-        }
+        if (evflag) ev_tally(i,j,nlocal,newton_pair,
+                             evdwl,0.0,fpair,delx,dely,delz);
       }
-
-      if (evflag) ev_tally(i,j,nlocal,newton_pair,
-                           evdwl,0.0,fpair,delx,dely,delz);
     }
+
+    //fprintf(stderr, "count:%d\n", total);
+
+    if (vflag_fdotr) virial_fdotr_compute();
   }
 
-  if (vflag_fdotr) virial_fdotr_compute();
-}
+  /* ----------------------------------------------------------------------
+     allocate all arrays
+     ------------------------------------------------------------------------- */
 
-/* ----------------------------------------------------------------------
-   allocate all arrays
-------------------------------------------------------------------------- */
+          void PairBody::allocate()
+          {
+            allocated = 1;
+            int n = atom->ntypes;
 
-void PairBody::allocate()
-{
-  allocated = 1;
-  int n = atom->ntypes;
+            memory->create(setflag,n+1,n+1,"pair:setflag");
+            for (int i = 1; i <= n; i++)
+              for (int j = i; j <= n; j++)
+                setflag[i][j] = 0;
 
-  memory->create(setflag,n+1,n+1,"pair:setflag");
-  for (int i = 1; i <= n; i++)
-    for (int j = i; j <= n; j++)
-      setflag[i][j] = 0;
+            memory->create(cutsq,n+1,n+1,"pair:cutsq");
 
-  memory->create(cutsq,n+1,n+1,"pair:cutsq");
+            memory->create(cut,n+1,n+1,"pair:cut");
+            memory->create(epsilon,n+1,n+1,"pair:epsilon");
+            memory->create(sigma,n+1,n+1,"pair:sigma");
+            memory->create(lj1,n+1,n+1,"pair:lj1");
+            memory->create(lj2,n+1,n+1,"pair:lj2");
+            memory->create(lj3,n+1,n+1,"pair:lj3");
+            memory->create(lj4,n+1,n+1,"pair:lj4");
+          }
 
-  memory->create(cut,n+1,n+1,"pair:cut");
-  memory->create(epsilon,n+1,n+1,"pair:epsilon");
-  memory->create(sigma,n+1,n+1,"pair:sigma");
-  memory->create(lj1,n+1,n+1,"pair:lj1");
-  memory->create(lj2,n+1,n+1,"pair:lj2");
-  memory->create(lj3,n+1,n+1,"pair:lj3");
-  memory->create(lj4,n+1,n+1,"pair:lj4");
-}
+          /* ----------------------------------------------------------------------
+             global settings
+             ------------------------------------------------------------------------- */
 
-/* ----------------------------------------------------------------------
-   global settings
-------------------------------------------------------------------------- */
+    void PairBody::settings(int narg, char **arg)
+    {
+      if (narg != 1) error->all(FLERR,"Illegal pair_style command");
 
-void PairBody::settings(int narg, char **arg)
-{
-  if (narg != 1) error->all(FLERR,"Illegal pair_style command");
+      cut_global = force->numeric(FLERR,arg[0]);
 
-  cut_global = force->numeric(FLERR,arg[0]);
+      // reset cutoffs that have been explicitly set
 
-  // reset cutoffs that have been explicitly set
-
-  if (allocated) {
-    int i,j;
-    for (i = 1; i <= atom->ntypes; i++)
-      for (j = i+1; j <= atom->ntypes; j++)
-        if (setflag[i][j]) cut[i][j] = cut_global;
-  }
-}
-
-/* ----------------------------------------------------------------------
-   set coeffs for one or more type pairs
-------------------------------------------------------------------------- */
-
-void PairBody::coeff(int narg, char **arg)
-{
-  if (narg < 4 || narg > 5)
-    error->all(FLERR,"Incorrect args for pair coefficients");
-  if (!allocated) allocate();
-
-  int ilo,ihi,jlo,jhi;
-  force->bounds(FLERR,arg[0],atom->ntypes,ilo,ihi);
-  force->bounds(FLERR,arg[1],atom->ntypes,jlo,jhi);
-
-  double epsilon_one = force->numeric(FLERR,arg[2]);
-  double sigma_one = force->numeric(FLERR,arg[3]);
-
-  double cut_one = cut_global;
-  if (narg == 5) cut_one = force->numeric(FLERR,arg[4]);
-
-  int count = 0;
-  for (int i = ilo; i <= ihi; i++) {
-    for (int j = MAX(jlo,i); j <= jhi; j++) {
-      epsilon[i][j] = epsilon_one;
-      sigma[i][j] = sigma_one;
-      cut[i][j] = cut_one;
-      setflag[i][j] = 1;
-      count++;
+      if (allocated) {
+        int i,j;
+        for (i = 1; i <= atom->ntypes; i++)
+          for (j = i+1; j <= atom->ntypes; j++)
+            if (setflag[i][j]) cut[i][j] = cut_global;
+      }
     }
-  }
 
-  if (count == 0) error->all(FLERR,"Incorrect args for pair coefficients");
-}
+    /* ----------------------------------------------------------------------
+       set coeffs for one or more type pairs
+       ------------------------------------------------------------------------- */
 
-/* ----------------------------------------------------------------------
-   init specific to this pair style
-------------------------------------------------------------------------- */
+            void PairBody::coeff(int narg, char **arg)
+            {
+              if (narg < 4 || narg > 5)
+                error->all(FLERR,"Incorrect args for pair coefficients");
+              if (!allocated) allocate();
 
-void PairBody::init_style()
-{
-  avec = (AtomVecBody *) atom->style_match("body");
-  if (!avec) error->all(FLERR,"Pair body requires atom style body");
-  if (strcmp(avec->bptr->style,"nparticle") != 0)
-    error->all(FLERR,"Pair body requires body style nparticle");
-  bptr = (BodyNparticle *) avec->bptr;
+              int ilo,ihi,jlo,jhi;
+              force->bounds(FLERR,arg[0],atom->ntypes,ilo,ihi);
+              force->bounds(FLERR,arg[1],atom->ntypes,jlo,jhi);
 
-  neighbor->request(this,instance_me);
-}
+              double epsilon_one = force->numeric(FLERR,arg[2]);
+              double sigma_one = force->numeric(FLERR,arg[3]);
 
-/* ----------------------------------------------------------------------
-   init for one type pair i,j and corresponding j,i
-------------------------------------------------------------------------- */
+              double cut_one = cut_global;
+              if (narg == 5) cut_one = force->numeric(FLERR,arg[4]);
 
-double PairBody::init_one(int i, int j)
-{
-  if (setflag[i][j] == 0) {
-    epsilon[i][j] = mix_energy(epsilon[i][i],epsilon[j][j],
-                               sigma[i][i],sigma[j][j]);
-    sigma[i][j] = mix_distance(sigma[i][i],sigma[j][j]);
-    cut[i][j] = mix_distance(cut[i][i],cut[j][j]);
-  }
+              int count = 0;
+              for (int i = ilo; i <= ihi; i++) {
+                for (int j = MAX(jlo,i); j <= jhi; j++) {
+                  epsilon[i][j] = epsilon_one;
+                  sigma[i][j] = sigma_one;
+                  cut[i][j] = cut_one;
+                  setflag[i][j] = 1;
+                  count++;
+                }
+              }
 
-  lj1[i][j] = 48.0 * epsilon[i][j] * pow(sigma[i][j],12.0);
-  lj2[i][j] = 24.0 * epsilon[i][j] * pow(sigma[i][j],6.0);
-  lj3[i][j] = 4.0 * epsilon[i][j] * pow(sigma[i][j],12.0);
-  lj4[i][j] = 4.0 * epsilon[i][j] * pow(sigma[i][j],6.0);
+              if (count == 0) error->all(FLERR,"Incorrect args for pair coefficients");
+            }
 
-  epsilon[j][i] = epsilon[i][j];
-  sigma[j][i] = sigma[i][j];
-  lj1[j][i] = lj1[i][j];
-  lj2[j][i] = lj2[i][j];
-  lj3[j][i] = lj3[i][j];
-  lj4[j][i] = lj4[i][j];
+            /* ----------------------------------------------------------------------
+               init specific to this pair style
+               ------------------------------------------------------------------------- */
 
-  return cut[i][j];
-}
+            void PairBody::init_style()
+            {
+              avec = (AtomVecBody *) atom->style_match("body");
+              if (!avec) error->all(FLERR,"Pair body requires atom style body");
+              if (strcmp(avec->bptr->style,"nparticle") != 0)
+                error->all(FLERR,"Pair body requires body style nparticle");
+              bptr = (BodyNparticle *) avec->bptr;
 
-/* ----------------------------------------------------------------------
-   convert N sub-particles in body I to space frame using current quaternion
-   store sub-particle space-frame displacements from COM in discrete list
-------------------------------------------------------------------------- */
+              neighbor->request(this,instance_me);
+            }
 
-void PairBody::body2space(int i)
-{
-  int ibonus = atom->body[i];
-  AtomVecBody::Bonus *bonus = &avec->bonus[ibonus];
-  int nsub = bptr->nsub(bonus);
-  double *coords = bptr->coords(bonus);
+            /* ----------------------------------------------------------------------
+               init for one type pair i,j and corresponding j,i
+               ------------------------------------------------------------------------- */
 
-  dnum[i] = nsub;
-  dfirst[i] = ndiscrete;
+              double PairBody::init_one(int i, int j)
+              {
+                if (setflag[i][j] == 0) {
+                  epsilon[i][j] = mix_energy(epsilon[i][i],epsilon[j][j],
+                                             sigma[i][i],sigma[j][j]);
+                  sigma[i][j] = mix_distance(sigma[i][i],sigma[j][j]);
+                  cut[i][j] = mix_distance(cut[i][i],cut[j][j]);
+                }
 
-  if (ndiscrete + nsub > dmax) {
-    dmax += DELTA;
-    memory->grow(discrete,dmax,3,"pair:discrete");
-  }
+                lj1[i][j] = 48.0 * epsilon[i][j] * pow(sigma[i][j],12.0);
+                lj2[i][j] = 24.0 * epsilon[i][j] * pow(sigma[i][j],6.0);
+                lj3[i][j] = 4.0 * epsilon[i][j] * pow(sigma[i][j],12.0);
+                lj4[i][j] = 4.0 * epsilon[i][j] * pow(sigma[i][j],6.0);
 
-  double p[3][3];
-  MathExtra::quat_to_mat(bonus->quat,p);
+                epsilon[j][i] = epsilon[i][j];
+                sigma[j][i] = sigma[i][j];
+                lj1[j][i] = lj1[i][j];
+                lj2[j][i] = lj2[i][j];
+                lj3[j][i] = lj3[i][j];
+                lj4[j][i] = lj4[i][j];
 
-  for (int m = 0; m < nsub; m++) {
-    MathExtra::matvec(p,&coords[3*m],discrete[ndiscrete]);
-    ndiscrete++;
-  }
-}
+                return cut[i][j];
+              }
+
+              /* ----------------------------------------------------------------------
+                 convert N sub-particles in body I to space frame using current quaternion
+                 store sub-particle space-frame displacements from COM in discrete list
+                 ------------------------------------------------------------------------- */
+
+            void PairBody::body2space(int i)
+            {
+              int ibonus = atom->body[i];
+              AtomVecBody::Bonus *bonus = &avec->bonus[ibonus];
+              int nsub = bptr->nsub(bonus);
+              double *coords = bptr->coords(bonus);
+
+              dnum[i] = nsub;
+              dfirst[i] = ndiscrete;
+
+              if (ndiscrete + nsub > dmax) {
+                dmax += DELTA;
+                memory->grow(discrete,dmax,3,"pair:discrete");
+              }
+
+              double p[3][3];
+              MathExtra::quat_to_mat(bonus->quat,p);
+
+              for (int m = 0; m < nsub; m++) {
+                MathExtra::matvec(p,&coords[3*m],discrete[ndiscrete]);
+                ndiscrete++;
+              }
+            }

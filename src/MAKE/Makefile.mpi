@@ -7,7 +7,7 @@ SHELL = /bin/sh
 # specify flags and libraries needed for your compiler
 
 CC =		mpicxx
-CCFLAGS =	-g -O3 
+CCFLAGS =	-g -O3 -std=c++11
 SHFLAGS =	-fPIC
 DEPFLAGS =	-M
 
@@ -41,7 +41,7 @@ LMP_INC =	-DLAMMPS_GZIP -DLAMMPS_MEMALIGN=64
 
 MPI_INC =       -DMPICH_SKIP_MPICXX -DOMPI_SKIP_MPICXX=1
 MPI_PATH = 
-MPI_LIB =	
+MPI_LIB = ../waterbox/libwaterbox_static.a ../waterbox/gzstream/libgzstream.a -lz
 
 # FFT library
 # see discussion in Section 2.2 (step 6) of manual
