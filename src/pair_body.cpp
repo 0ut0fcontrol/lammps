@@ -168,13 +168,13 @@ void PairBody::compute(int eflag, int vflag)
 
             atom1.atoms.push_back(
                                   {x[i][0] + dxi[0], x[i][1] + dxi[1], x[i][2] + dxi[2]});
-                                  printf("%lf %lf %lf\n", x[i][0] + dxi[0], x[i][1] + dxi[1], x[i][2] + dxi[2]);
+                                  // printf("%lf %lf %lf\n", x[i][0] + dxi[0], x[i][1] + dxi[1], x[i][2] + dxi[2]);
           }
           for (nj = 0; nj < npj; nj++) {
             dxj = discrete[jfirst+nj];
             atom2.atoms.push_back(
                                   {x[j][0] + dxj[0], x[j][1] + dxj[1], x[j][2] + dxj[2]});
-                                  printf("%lf %lf %lf\n", x[j][0] + dxj[0], x[j][1] + dxj[1], x[j][2] + dxj[2]);
+                                  // printf("%lf %lf %lf\n", x[j][0] + dxj[0], x[j][1] + dxj[1], x[j][2] + dxj[2]);
           }
 
           auto res = computeForceAndTorque(atom1, atom2);
@@ -188,7 +188,7 @@ void PairBody::compute(int eflag, int vflag)
         // Added by qiuyu fu
             if (eflag) {
                evdwl += res[6];
-               printf("%lf\n",res[6] );
+               // printf("%lf\n",res[6] );
             }
         // End.
   
